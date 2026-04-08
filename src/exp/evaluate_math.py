@@ -3,7 +3,6 @@ import re
 import os
 import random
 import transformers
-from vllm import LLM, SamplingParams
 from tqdm import tqdm
 from transformers import (
     AutoTokenizer,

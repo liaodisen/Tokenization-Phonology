@@ -17,8 +17,8 @@ from peft import (
     prepare_model_for_kbit_training
 )
 from accelerate.utils import DistributedType
-from utils import IPA_TOKENS
-from dataset import (
+from finetune.utils import IPA_TOKENS
+from finetune.dataset import (
     load_conversation_dataset, 
     load_phonetic_dataset, 
     DataCollatorForSupervisedDataset,
