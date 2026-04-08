@@ -1,0 +1,15 @@
+# pycache
+__pycache__/
+
+# datasets
+embeddings/
+finetune_datasets/
+
+# logs and outputs
+wandb/
+results/
+output*
+
+# models
+model*
+
