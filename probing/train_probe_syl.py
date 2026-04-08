@@ -91,6 +91,7 @@ def main():
     parser.add_argument("--prefix", type=str, default="none", help="Prefix to use for training")
     parser.add_argument('--control_task_label', action='store_true', help="whether to randomize the label as the control task.")
     parser.add_argument('--control_task_embed', action='store_true', help="whether to randomize the embedding as the control task.")
+    parser.add_argument('--combine_datasets', action='store_true', help="combine bad and good datasets and train one model")
 
     args = parser.parse_args()
 
@@ -114,6 +115,7 @@ def main():
     for i in range(layers):
         r2_scores_bad = []
         r2_scores_good = []
+        r2_scores_combined = []
         for seed in range(10, 20):
             np.random.seed(seed)
             torch.manual_seed(seed)
@@ -135,49 +137,82 @@ def main():
             y_good = (y_good - y_good.mean(axis=0)) / y_good.std(axis=0)
             X_bad = np.array(embeddings_bad)
             X_good = np.array(embeddings_good)
-            X_train_bad, X_test_bad, y_train_bad, y_test_bad = train_test_split(X_bad, y_bad, test_size=0.2, random_state=seed)
-            X_train_good, X_test_good, y_train_good, y_test_good = train_test_split(X_good, y_good, test_size=0.2, random_state=seed)
-            model = RidgeCV(alphas=[10, 100, 500, 1000, 2000])
-            model.fit(X_train_bad, y_train_bad)
-            model_good = RidgeCV(alphas=[10, 100, 500, 1000, 2000])
-            model_good.fit(X_train_good, y_train_good)
+            print(f"Layer {i} - X_bad shape: {X_bad.shape}")
+            print(f"Layer {i} - X_good shape: {X_good.shape}")
+            print(f"Layer {i} - y_bad shape: {y_bad.shape}")
+            print(f"Layer {i} - y_good shape: {y_good.shape}")
+            if args.combine_datasets:
+                X_combined = np.concatenate([X_bad, X_good], axis=0)
+                y_combined = np.concatenate([y_bad, y_good], axis=0)
+                X_train_c, X_test_c, y_train_c, y_test_c = train_test_split(
+                    X_combined, y_combined, test_size=0.2, random_state=seed
+                )
+                print("done splitting")
+                model_c = RidgeCV(alphas=[10, 100, 500, 1000, 2000])
+                model_c.fit(X_train_c, y_train_c, max_iter = 1000)
+                y_pred_c = model_c.predict(X_test_c)
+                r2_c = r2_score(y_test_c, y_pred_c)
+                print(f"Layer {i} - R2 Combined: {r2_c:.4f}")
+                r2_scores_combined.append(r2_c)
+            else:
+                X_train_bad, X_test_bad, y_train_bad, y_test_bad = train_test_split(X_bad, y_bad, test_size=0.2, random_state=seed)
+                X_train_good, X_test_good, y_train_good, y_test_good = train_test_split(X_good, y_good, test_size=0.2, random_state=seed)
+                model = RidgeCV(alphas=[10, 100, 500, 1000, 2000])
+                model.fit(X_train_bad, y_train_bad)
+                model_good = RidgeCV(alphas=[10, 100, 500, 1000, 2000])
+                model_good.fit(X_train_good, y_train_good)
 
-            y_pred_bad = model.predict(X_test_bad)
-            y_pred_good = model_good.predict(X_test_good)
+                y_pred_bad = model.predict(X_test_bad)
+                y_pred_good = model_good.predict(X_test_good)
 
-            r2_bad = r2_score(y_test_bad, y_pred_bad)
-            r2_good = r2_score(y_test_good, y_pred_good)
-            print(f"Layer {i} - R2 Bad: {r2_bad:.4f}")
-            print(f"Layer {i} - R2 Good: {r2_good:.4f}")
-            r2_scores_bad.append(r2_bad)
-            r2_scores_good.append(r2_good)
+                r2_bad = r2_score(y_test_bad, y_pred_bad)
+                r2_good = r2_score(y_test_good, y_pred_good)
+                print(f"Layer {i} - R2 Bad: {r2_bad:.4f}")
+                print(f"Layer {i} - R2 Good: {r2_good:.4f}")
+                r2_scores_bad.append(r2_bad)
+                r2_scores_good.append(r2_good)
 
 
-        # Calculate one-tailed p-value using paired t-test
-        t_stat, p_value = ttest_rel(r2_scores_good, r2_scores_bad)
-        p_value_one_tailed = p_value / 2 if t_stat > 0 else 1 - (p_value / 2)
+        if args.combine_datasets:
+            results[f"layer_{i}"] = {
+                "r2_scores_combined": r2_scores_combined,
+                "mean_combined": float(np.mean(r2_scores_combined)) if len(r2_scores_combined) else 0.0,
+                "std_combined": float(np.std(r2_scores_combined)) if len(r2_scores_combined) else 0.0,
+            }
+        else:
+            # Calculate one-tailed p-value using paired t-test
+            t_stat, p_value = ttest_rel(r2_scores_good, r2_scores_bad)
+            p_value_one_tailed = p_value / 2 if t_stat > 0 else 1 - (p_value / 2)
 
-        results[f"layer_{i}"] = {
-            "r2_scores_bad": r2_scores_bad,
-            "r2_scores_good": r2_scores_good,
-            "mean_bad": np.mean(r2_scores_bad),
-            "mean_good": np.mean(r2_scores_good),
-            "p_value_one_tailed": p_value_one_tailed,
-            "std_bad": np.std(r2_scores_bad),
-            "std_good": np.std(r2_scores_good),
-        }
+            results[f"layer_{i}"] = {
+                "r2_scores_bad": r2_scores_bad,
+                "r2_scores_good": r2_scores_good,
+                "mean_bad": np.mean(r2_scores_bad),
+                "mean_good": np.mean(r2_scores_good),
+                "p_value_one_tailed": p_value_one_tailed,
+                "std_bad": np.std(r2_scores_bad),
+                "std_good": np.std(r2_scores_good),
+            }
 
         # print(f"Layer {i} - R2 Bad: {np.mean(r2_scores_bad):.4f}")
         # print(f"Layer {i} - R2 Good: {np.mean(r2_scores_good):.4f}")
         # print(f"Layer {i} - One-tailed P-Value: {p_value_one_tailed:.10f}")
 
     # Save results to a JSON file
-    if args.control_task_label:
-        save_path = f'results/probing_results_syllables_{args.LLM}_{args.prefix}_control_task_label.json'
-    elif args.control_task_embed:
-        save_path = f'results/probing_results_syllables_{args.LLM}_{args.prefix}_control_task_embed.json'
+    if args.combine_datasets:
+        if args.control_task_label:
+            save_path = f'results/probing_results_syllables_{args.LLM}_{args.prefix}_combined_control_task_label.json'
+        elif args.control_task_embed:
+            save_path = f'results/probing_results_syllables_{args.LLM}_{args.prefix}_combined_control_task_embed.json'
+        else:
+            save_path = f'results/probing_results_syllables_{args.LLM}_{args.prefix}_combined.json'
     else:
-        save_path = f'results/probing_results_syllables_{args.LLM}_{args.prefix}.json'
+        if args.control_task_label:
+            save_path = f'results/probing_results_syllables_{args.LLM}_{args.prefix}_control_task_label.json'
+        elif args.control_task_embed:
+            save_path = f'results/probing_results_syllables_{args.LLM}_{args.prefix}_control_task_embed.json'
+        else:
+            save_path = f'results/probing_results_syllables_{args.LLM}_{args.prefix}.json'
     with open(save_path, 'w') as f:
         json.dump(results, f, indent=4)
 

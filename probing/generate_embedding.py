@@ -17,6 +17,7 @@ def init_model(LLM, device):
     """
     if LLM == 'llama3.1':
         model_id = "meta-llama/Meta-Llama-3.1-8B-Instruct"
+        model_id = "/model-weights/Meta-Llama-3.1-8B-Instruct"
     elif LLM == 'llama3':
         model_id = "meta-llama/Meta-Llama-3-8B"
     elif LLM == 'llama2':
@@ -25,8 +26,12 @@ def init_model(LLM, device):
         model_id = "bert-base-uncased"
     elif LLM == 'bloom':
         model_id = "bigscience/bloom-560m"
+    elif LLM == 'gpt-neo':
+        model_id = "EleutherAI/gpt-neo-2.7B"
     elif LLM == 'gemma-2b':
         model_id = "google/gemma-1.1-2b-it"
+    elif LLM == 'mistral':
+        model_id = "/model-weights/Mistral-7B-Instruct-v0.3"
     elif LLM == 'gpt2':
         model_id = "gpt2"
     elif LLM == 'ByT5-small':
